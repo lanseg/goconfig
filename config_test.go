@@ -17,7 +17,7 @@ type Scalars struct {
 	Float64 float64 `arg:"float64_field" env:"FLOAT64_FIELD"`
 }
 
-func TestSettings(t *testing.T) {
+func TestPlainSettings(t *testing.T) {
 
 	fullScalarArgs := []string{
 		"--bool_field=true",
@@ -139,6 +139,47 @@ func TestSettings(t *testing.T) {
 			wantErr: true,
 		},
 	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for k, v := range tc.envs {
+				t.Setenv(k, v)
+			}
+			os.Args = append([]string{os.Args[0]}, tc.args...)
+			if tc.src == nil {
+				tc.src = []ConfigSource{FromArgs, FromEnv}
+			}
+			config, err := GetConfig[Scalars](tc.src...)
+			if err != nil && !tc.wantErr {
+				t.Errorf("Unexpected error: %s", err)
+			} else if !reflect.DeepEqual(tc.want, config) {
+				t.Errorf("Expected config for flags %q should be \n%v, but got\n%v",
+					tc.args, tc.want, config)
+			}
+		})
+	}
+}
+
+type NestedStructLevel1 struct {
+	First  *Scalars `arg:"first" env:"FIRST"`
+	Second *Scalars `arg:"second" env:"SECOND"`
+	String string   `arg:"string" env:"STRING"`
+}
+
+type NestedStructLevel struct {
+	First  *NestedStructLevel1 `arg:"first" env:"FIRST"`
+	Second *NestedStructLevel1 `arg:"second" env:"SECOND"`
+	Third  *Scalars            `arg:"third" env:"THIRD"`
+	String string              `arg:"string" env:"STRING"`
+}
+
+func TestNestedSettings(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		envs    map[string]string
+		src     []ConfigSource
+		args    []string
+		want    *Scalars
+		wantErr bool
+	}{} {
 		t.Run(tc.name, func(t *testing.T) {
 			for k, v := range tc.envs {
 				t.Setenv(k, v)
