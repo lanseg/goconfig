@@ -13,15 +13,13 @@ type ConfigSource = func(values []*valueDef) error
 type valueDef struct {
 	field *reflect.StructField
 	value *reflect.Value
-	leaf  bool
 	tags  map[string][]string
+	leaf  bool
 }
 
-func newValueDef(v *reflect.Value, f *reflect.StructField, tags map[string][]string) *valueDef {
-	result := &valueDef{value: v, field: f, tags: map[string][]string{}}
-	if f == nil {
-		return result
-	}
+func newValueDef(parent reflect.Value, field int, tags map[string][]string) *valueDef {
+	v, f := parent.Field(field), parent.Type().Field(field)
+	result := &valueDef{value: &v, field: &f, tags: map[string][]string{}}
 	for _, tag := range []string{"env", "arg"} {
 		result.tags[tag] = append(tags[tag], f.Tag.Get(tag))
 	}
@@ -31,8 +29,8 @@ func newValueDef(v *reflect.Value, f *reflect.StructField, tags map[string][]str
 func resolveTypeFields[T any]() (*T, []*valueDef) {
 	obj := new(T)
 	root := reflect.ValueOf(obj)
-	toVisit := []*valueDef{newValueDef(&root, nil, map[string][]string{})}
 	result := []*valueDef{}
+	toVisit := []*valueDef{{value: &root, field: nil, tags: map[string][]string{}}}
 	for len(toVisit) > 0 {
 		current := toVisit[0]
 		result = append(result, current)
@@ -46,8 +44,7 @@ func resolveTypeFields[T any]() (*T, []*valueDef) {
 		toVisit = toVisit[1:]
 		if actualValue.Kind() == reflect.Struct {
 			for fi := range actualValue.NumField() {
-				a, b := actualValue.Field(fi), actualValue.Type().Field(fi)
-				toVisit = append(toVisit, newValueDef(&a, &b, current.tags))
+				toVisit = append(toVisit, newValueDef(actualValue, fi, current.tags))
 			}
 		} else {
 			current.leaf = true

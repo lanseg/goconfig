@@ -4,6 +4,8 @@ import (
 	"os"
 	"reflect"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 type Scalars struct {
@@ -65,9 +67,9 @@ func TestPlainSettings(t *testing.T) {
 
 	for _, tc := range []struct {
 		name    string
+		args    []string
 		envs    map[string]string
 		src     []ConfigSource
-		args    []string
 		want    *Scalars
 		wantErr bool
 	}{
@@ -158,15 +160,15 @@ func TestPlainSettings(t *testing.T) {
 	}
 }
 
-type NestedStructLevel1 struct {
+type NestedScalarsInner struct {
 	First  *Scalars `arg:"first" env:"FIRST"`
 	Second *Scalars `arg:"second" env:"SECOND"`
 	String string   `arg:"string" env:"STRING"`
 }
 
-type NestedStructLevel struct {
-	First  *NestedStructLevel1 `arg:"first" env:"FIRST"`
-	Second *NestedStructLevel1 `arg:"second" env:"SECOND"`
+type NestedScalarsOuter struct {
+	First  *NestedScalarsInner `arg:"first" env:"FIRST"`
+	Second *NestedScalarsInner `arg:"second" env:"SECOND"`
 	Third  *Scalars            `arg:"third" env:"THIRD"`
 	String string              `arg:"string" env:"STRING"`
 }
@@ -174,12 +176,30 @@ type NestedStructLevel struct {
 func TestNestedSettings(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
+		args    []string
 		envs    map[string]string
 		src     []ConfigSource
-		args    []string
-		want    *Scalars
+		want    *NestedScalarsOuter
 		wantErr bool
-	}{} {
+	}{
+		{
+			name: "arg some scalars set, others empty",
+			args: []string{"--first_first_string_field=String_field_set"},
+			want: &NestedScalarsOuter{
+				First: &NestedScalarsInner{
+					First:  &Scalars{String: "String_field_set"},
+					Second: &Scalars{},
+				},
+				Second: &NestedScalarsInner{First: &Scalars{}, Second: &Scalars{}},
+				Third:  &Scalars{},
+			},
+		},
+		{
+			name:    "arg name mismatch",
+			args:    []string{"--first_string_field=String_field_set"},
+			wantErr: true,
+		},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for k, v := range tc.envs {
 				t.Setenv(k, v)
@@ -188,13 +208,30 @@ func TestNestedSettings(t *testing.T) {
 			if tc.src == nil {
 				tc.src = []ConfigSource{FromArgs, FromEnv}
 			}
-			config, err := GetConfig[Scalars](tc.src...)
+			got, err := GetConfig[NestedScalarsOuter](tc.src...)
 			if err != nil && !tc.wantErr {
 				t.Errorf("Unexpected error: %s", err)
-			} else if !reflect.DeepEqual(tc.want, config) {
-				t.Errorf("Expected config for flags %q should be \n%v, but got\n%v",
-					tc.args, tc.want, config)
+				return
+			}
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("Config mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
+}
+
+type RecursiveSettings struct {
+	Value string
+	Left  *RecursiveSettings
+	Right *RecursiveSettings
+}
+
+func TestRecursiveSettings(t *testing.T) {
+	t.Run("self recursed binary tree", func(t *testing.T) {
+		_, err := GetConfig[RecursiveSettings](FromArgs, FromEnv)
+		if err != nil {
+			t.Errorf("Unexpected error: %s", err)
+			return
+		}
+	})
 }
