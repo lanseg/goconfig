@@ -9,14 +9,15 @@ import (
 )
 
 type Scalars struct {
-	Bool    bool    `arg:"bool_field" env:"BOOL_FIELD"`
-	String  string  `arg:"string_field" env:"STRING_FIELD"`
-	Int     int     `arg:"int_field" env:"INT_FIELD"`
-	Int64   int64   `arg:"int64_field" env:"INT64_FIELD"`
-	Uint    uint    `arg:"uint_field" env:"UINT_FIELD"`
-	Uint64  uint64  `arg:"uint64_field" env:"UINT64_FIELD"`
-	Float32 float32 `arg:"float32_field" env:"FLOAT32_FIELD"`
-	Float64 float64 `arg:"float64_field" env:"FLOAT64_FIELD"`
+	Bool       bool    `arg:"bool_field" env:"BOOL_FIELD"`
+	String     string  `arg:"string_field" env:"STRING_FIELD"`
+	Int        int     `arg:"int_field" env:"INT_FIELD"`
+	Int64      int64   `arg:"int64_field" env:"INT64_FIELD"`
+	Uint       uint    `arg:"uint_field" env:"UINT_FIELD"`
+	Uint64     uint64  `arg:"uint64_field" env:"UINT64_FIELD"`
+	Float32    float32 `arg:"float32_field" env:"FLOAT32_FIELD"`
+	Float64    float64 `arg:"float64_field" env:"FLOAT64_FIELD"`
+	NoTagField string
 }
 
 func TestPlainSettings(t *testing.T) {
@@ -30,17 +31,19 @@ func TestPlainSettings(t *testing.T) {
 		"--uint64_field=123456789123456789",
 		"--float32_field=3.1415",
 		"--float64_field=3.141592653589793",
+		"--NoTagField=whatever",
 	}
 
 	fullScalarArgResult := &Scalars{
-		Bool:    true,
-		String:  "String_field_set",
-		Int:     -123,
-		Int64:   -123456789,
-		Uint:    123456789,
-		Uint64:  123456789123456789,
-		Float32: 3.1415,
-		Float64: 3.141592653589793,
+		Bool:       true,
+		String:     "String_field_set",
+		Int:        -123,
+		Int64:      -123456789,
+		Uint:       123456789,
+		Uint64:     123456789123456789,
+		Float32:    3.1415,
+		Float64:    3.141592653589793,
+		NoTagField: "whatever",
 	}
 
 	fullScalarEnv := map[string]string{
@@ -52,19 +55,23 @@ func TestPlainSettings(t *testing.T) {
 		"UINT64_FIELD":  "123456789123456789",
 		"FLOAT32_FIELD": "3.1415",
 		"FLOAT64_FIELD": "3.141592653589793",
+		"NoTagField":    "whatever",
 	}
 
 	fullScalarEnvResult := &Scalars{
-		Bool:    true,
-		String:  "String_field_set",
-		Int:     -123,
-		Int64:   -123456789,
-		Uint:    123456789,
-		Uint64:  123456789123456789,
-		Float32: 3.1415,
-		Float64: 3.141592653589793,
+		Bool:       true,
+		String:     "String_field_set",
+		Int:        -123,
+		Int64:      -123456789,
+		Uint:       123456789,
+		Uint64:     123456789123456789,
+		Float32:    3.1415,
+		Float64:    3.141592653589793,
+		NoTagField: "whatever",
 	}
 
+	args := make([]string, len(os.Args))
+	copy(args, os.Args)
 	for _, tc := range []struct {
 		name    string
 		args    []string
@@ -158,6 +165,7 @@ func TestPlainSettings(t *testing.T) {
 			}
 		})
 	}
+	os.Args = args
 }
 
 type NestedScalarsInner struct {
@@ -174,6 +182,8 @@ type NestedScalarsOuter struct {
 }
 
 func TestNestedSettings(t *testing.T) {
+	args := make([]string, len(os.Args))
+	copy(args, os.Args)
 	for _, tc := range []struct {
 		name    string
 		args    []string
@@ -218,20 +228,60 @@ func TestNestedSettings(t *testing.T) {
 			}
 		})
 	}
+	os.Args = args
 }
 
 type RecursiveSettings struct {
-	Value string
-	Left  *RecursiveSettings
-	Right *RecursiveSettings
+	Value string             `arg:"value" env:"VALUE"`
+	Left  *RecursiveSettings `arg:"left" env:"LEFT"`
+	Right *RecursiveSettings `arg:"right" env:"RIGHT"`
 }
 
 func TestRecursiveSettings(t *testing.T) {
+	args := make([]string, len(os.Args))
+	copy(args, os.Args)
+
 	t.Run("self recursed binary tree", func(t *testing.T) {
-		_, err := GetConfig[RecursiveSettings](FromArgs, FromEnv)
+		os.Args = append(os.Args[:1], "--value=HelloWorld")
+		got, err := GetConfig[RecursiveSettings](FromArgs, FromEnv)
 		if err != nil {
 			t.Errorf("Unexpected error: %s", err)
 			return
 		}
+
+		want := &RecursiveSettings{
+			Value: "HelloWorld",
+			Right: &RecursiveSettings{Left: &RecursiveSettings{}, Right: &RecursiveSettings{}},
+			Left:  &RecursiveSettings{Left: &RecursiveSettings{}, Right: &RecursiveSettings{}},
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("Config mismatch (-want +got):\n%s", diff)
+		}
 	})
+	os.Args = args
+}
+
+func TestAnonymousFields(t *testing.T) {
+	args := make([]string, len(os.Args))
+	copy(args, os.Args)
+
+	t.Run("anonymous type config", func(t *testing.T) {
+		os.Args = append(os.Args[:1], "--string_field=HelloWorld")
+		got, err := GetConfig[struct {
+			StringField string `arg:"string_field" env:"STRING_FIELD"`
+		}](FromArgs, FromEnv)
+		if err != nil {
+			t.Errorf("Unexpected error: %s", err)
+			return
+		}
+		want := &struct {
+			StringField string `arg:"string_field" env:"STRING_FIELD"`
+		}{
+			StringField: "HelloWorld",
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("Config mismatch (-want +got):\n%s", diff)
+		}
+	})
+	os.Args = args
 }

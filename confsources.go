@@ -38,32 +38,36 @@ func set(value *reflect.Value, str string) error {
 	return result
 }
 
-func FromEnv(values []*valueDef) error {
+func FromEnv(nodes []*node) error {
 	result := []error{}
-	for _, value := range values {
-		if !value.leaf {
+	for _, node := range nodes {
+		if node.field.Type.Kind() == reflect.Struct {
 			continue
 		}
-		varValue, ok := os.LookupEnv(strings.Join(value.tags["env"], "_"))
+		varValue, ok := os.LookupEnv(strings.Join(node.tags["env"], "_"))
 		if !ok {
 			continue
 		}
-		if err := set(value.value, varValue); err != nil {
+		v := node.value
+		if v.Kind() == reflect.Pointer {
+			v = v.Elem()
+		}
+		if err := set(&v, varValue); err != nil {
 			result = append(result, err)
 		}
 	}
 	return errors.Join(result...)
 }
 
-func FromArgs(values []*valueDef) error {
+func FromArgs(nodes []*node) error {
 	fargs := flag.NewFlagSet("Command line arguments", flag.ContinueOnError)
-	leaves := map[string]*valueDef{}
-	for _, value := range values {
-		if !value.leaf {
+	leaves := map[string]*reflect.Value{}
+	for _, node := range nodes {
+		if node.field.Type.Kind() == reflect.Struct {
 			continue
 		}
-		name := strings.Join(value.tags["arg"], "_")
-		leaves[name] = value
+		name := strings.Join(node.tags["arg"], "_")
+		leaves[name] = &node.value
 		fargs.String(name, "", "help")
 	}
 	if err := fargs.Parse(os.Args[1:]); err != nil {
@@ -71,11 +75,15 @@ func FromArgs(values []*valueDef) error {
 	}
 	result := []error{}
 	fargs.Visit(func(f *flag.Flag) {
-		leaf, ok := leaves[f.Name]
+		value, ok := leaves[f.Name]
 		if !ok {
 			return
 		}
-		if err := set(leaf.value, f.Value.String()); err != nil {
+		v := *value
+		if v.Kind() == reflect.Pointer {
+			v = v.Elem()
+		}
+		if err := set(&v, f.Value.String()); err != nil {
 			result = append(result, err)
 		}
 	})
