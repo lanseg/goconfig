@@ -197,11 +197,8 @@ func TestNestedSettings(t *testing.T) {
 			args: []string{"--first_first_string_field=String_field_set"},
 			want: &NestedScalarsOuter{
 				First: &NestedScalarsInner{
-					First:  &Scalars{String: "String_field_set"},
-					Second: &Scalars{},
+					First: &Scalars{String: "String_field_set"},
 				},
-				Second: &NestedScalarsInner{First: &Scalars{}, Second: &Scalars{}},
-				Third:  &Scalars{},
 			},
 		},
 		{
@@ -251,8 +248,6 @@ func TestRecursiveSettings(t *testing.T) {
 
 		want := &RecursiveSettings{
 			Value: "HelloWorld",
-			Right: &RecursiveSettings{Left: &RecursiveSettings{}, Right: &RecursiveSettings{}},
-			Left:  &RecursiveSettings{Left: &RecursiveSettings{}, Right: &RecursiveSettings{}},
 		}
 		if diff := cmp.Diff(want, got); diff != "" {
 			t.Errorf("Config mismatch (-want +got):\n%s", diff)

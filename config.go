@@ -25,9 +25,10 @@ func (s Set[T]) Has(value T) bool {
 type node struct {
 	parent *node
 
-	tags  map[string][]string
-	field reflect.StructField
-	value reflect.Value
+	hasValue bool
+	tags     map[string][]string
+	field    reflect.StructField
+	value    reflect.Value
 }
 
 func indirect(root reflect.Type) reflect.Type {
@@ -75,33 +76,54 @@ func flatten(root reflect.Type) []*node {
 	return result
 }
 
+func getScalars(nodes []*node) []*node {
+	result := []*node{}
+	for _, node := range nodes {
+		if indirect(node.field.Type).Kind() == reflect.Struct {
+			continue
+		}
+		result = append(result, node)
+	}
+	return result
+}
+
+func resolveParents(n *node) {
+	for n.parent != nil {
+		if !n.parent.value.IsValid() {
+			n.parent.value = reflect.New(indirect(n.parent.field.Type))
+		}
+		reflect.Indirect(n.parent.value).
+			FieldByName(n.field.Name).
+			Set(n.value)
+		n = n.parent
+	}
+}
+
 type ConfigSource = func(nodes []*node) error
 
 func GetConfig[T any](sources ...ConfigSource) (*T, error) {
 	result := new(T)
 	nodes := flatten(reflect.TypeFor[T]())
 	nodes[0].value = reflect.ValueOf(result)
-	for i, node := range nodes[1:] {
-		nodes[i+1].value = reflect.New(indirect(node.field.Type))
+
+	scalars := getScalars(nodes)
+	for _, node := range scalars {
+		node.value = reflect.New(indirect(node.field.Type)).Elem()
 	}
+
 	for _, src := range sources {
-		if err := src(nodes); err != nil {
+		if err := src(scalars); err != nil {
 			return nil, err
 		}
 	}
-	for _, node := range nodes[1:] {
-		parent := node.parent.value
-		if parent.Kind() == reflect.Pointer {
-			parent = parent.Elem()
+	for _, node := range scalars {
+		if !node.hasValue {
+			continue
 		}
-		childField := parent.FieldByName(node.field.Name)
-		if childField.Kind() == reflect.Pointer && node.value.Kind() != reflect.Pointer {
-			childField.Elem().Set(node.value)
-		} else if childField.Kind() != reflect.Pointer && node.value.Kind() == reflect.Pointer {
-			childField.Set(node.value.Elem())
-		} else {
-			childField.Set(node.value)
-		}
+		resolveParents(node)
+		parentValue := reflect.Indirect(node.parent.value)
+		parentValue.FieldByName(node.field.Name).Set(reflect.Indirect(node.value))
 	}
+
 	return result, nil
 }

@@ -54,6 +54,8 @@ func FromEnv(nodes []*node) error {
 		}
 		if err := set(&v, varValue); err != nil {
 			result = append(result, err)
+		} else {
+			node.hasValue = true
 		}
 	}
 	return errors.Join(result...)
@@ -61,13 +63,13 @@ func FromEnv(nodes []*node) error {
 
 func FromArgs(nodes []*node) error {
 	fargs := flag.NewFlagSet("Command line arguments", flag.ContinueOnError)
-	leaves := map[string]*reflect.Value{}
+	leaves := map[string]*node{}
 	for _, node := range nodes {
 		if node.field.Type.Kind() == reflect.Struct {
 			continue
 		}
 		name := strings.Join(node.tags["arg"], "_")
-		leaves[name] = &node.value
+		leaves[name] = node
 		fargs.String(name, "", "help")
 	}
 	if err := fargs.Parse(os.Args[1:]); err != nil {
@@ -75,16 +77,18 @@ func FromArgs(nodes []*node) error {
 	}
 	result := []error{}
 	fargs.Visit(func(f *flag.Flag) {
-		value, ok := leaves[f.Name]
+		n, ok := leaves[f.Name]
 		if !ok {
 			return
 		}
-		v := *value
+		v := n.value
 		if v.Kind() == reflect.Pointer {
 			v = v.Elem()
 		}
 		if err := set(&v, f.Value.String()); err != nil {
 			result = append(result, err)
+		} else {
+			n.hasValue = true
 		}
 	})
 	return errors.Join(result...)
