@@ -4,6 +4,22 @@ A library to gather parameters from various places into a single config struct
 
 ## What is supported and what is not
 
+* Can:
+  * Use any struct to store configs
+  * Automatically build configuration argument names
+* Cannot (yet):
+  * Define maps or arrays with command line args or environment variables
+  * Use recursive structs (when a struct has a child of the same type)
+  * Operate multilevel pointers (pointer to pointer to ... to pointer to something)
+* Cannot:
+  * Operate ```chan``` fields
+  * Operate "any" (```interface{}```) fields
+
+## How to use it
+
+1. Define a struct to store your config
+2. If needed, customize field names with tags, ```env``` for environment variables and ```arg``` for the command line arguments
+3. Call ```GetConfig[YourStruct](FromEnv, FromArg)``` to read config values
 
 ## How it works
 
@@ -12,7 +28,7 @@ A library to gather parameters from various places into a single config struct
 3. Set the field values from the value sources - if value is provided by multiple sources, then we will use the latest.
 4. Fold edge list into a tree, create nodes which have values among their branches, other will remain nil.
 
-## Usage examples
+## Examples
 ```go
 import (
     "github.com/lanseg/goconfig"

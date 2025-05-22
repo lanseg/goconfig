@@ -1,6 +1,7 @@
 package goconfig
 
 import (
+	"fmt"
 	"reflect"
 )
 
@@ -15,6 +16,10 @@ var (
 type ConfigSource = func(nodes []*node) error
 
 func GetConfig[T any](sources ...ConfigSource) (*T, error) {
+	rootType := reflect.TypeFor[T]()
+	if rootType.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("only struct types are supported, but got kind %s", rootType.Kind())
+	}
 	result := new(T)
 	nodes := flatten(reflect.TypeFor[T]())
 	nodes[0].value = reflect.ValueOf(result)

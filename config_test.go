@@ -306,7 +306,6 @@ func doUnsupportedTest[T any](name string, t *testing.T) {
 }
 
 func TestUnsupportedFields(t *testing.T) {
-
 	doUnsupportedTest[chan int]("channel fields not supported", t)
 	doUnsupportedTest[map[string]string]("map fields not supported", t)
 	doUnsupportedTest[func()]("function fields not supported", t)
@@ -314,4 +313,9 @@ func TestUnsupportedFields(t *testing.T) {
 	doUnsupportedTest[**int]("nested pointer fields not supported", t)
 	doUnsupportedTest[interface{}]("untyped interface fields not supported", t)
 
+	t.Run("Only structs for root type", func(t *testing.T) {
+		if _, err := GetConfig[int](); err == nil {
+			t.Errorf("Expected error for non-struct root type")
+		}
+	})
 }
