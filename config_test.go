@@ -239,7 +239,7 @@ func TestRecursiveSettings(t *testing.T) {
 	copy(args, os.Args)
 
 	t.Run("self recursed binary tree", func(t *testing.T) {
-		os.Args = append(os.Args[:1], "--value=HelloWorld")
+		os.Args = append(os.Args[:1], "--value=HelloWorld", "--left_value=LeftValue")
 		got, err := GetConfig[RecursiveSettings](FromArgs, FromEnv)
 		if err != nil {
 			t.Errorf("Unexpected error: %s", err)
@@ -248,6 +248,7 @@ func TestRecursiveSettings(t *testing.T) {
 
 		want := &RecursiveSettings{
 			Value: "HelloWorld",
+			Left:  &RecursiveSettings{Value: "LeftValue"},
 		}
 		if diff := cmp.Diff(want, got); diff != "" {
 			t.Errorf("Config mismatch (-want +got):\n%s", diff)
@@ -256,7 +257,7 @@ func TestRecursiveSettings(t *testing.T) {
 	os.Args = args
 }
 
-func TestAnonymousFields(t *testing.T) {
+func TestAnonymousStructs(t *testing.T) {
 	args := make([]string, len(os.Args))
 	copy(args, os.Args)
 
@@ -279,4 +280,38 @@ func TestAnonymousFields(t *testing.T) {
 		}
 	})
 	os.Args = args
+}
+
+type SomeStruct[T any] struct {
+	Value *T `arg:"value" env:"VALUE"`
+}
+
+func doUnsupportedTest[T any](name string, t *testing.T) {
+	args := make([]string, len(os.Args))
+	copy(args, os.Args)
+	os.Args = os.Args[:1]
+
+	t.Run(name, func(t *testing.T) {
+		cfg, err := GetConfig[SomeStruct[T]](FromArgs, FromEnv)
+		if err != nil {
+			t.Errorf("Unexpected error: %s", err)
+			return
+		}
+		if cfg.Value != nil {
+			t.Errorf("unsupported type %T should not be set", cfg.Value)
+		}
+	})
+
+	os.Args = args
+}
+
+func TestUnsupportedFields(t *testing.T) {
+
+	doUnsupportedTest[chan int]("channel fields not supported", t)
+	doUnsupportedTest[map[string]string]("map fields not supported", t)
+	doUnsupportedTest[func()]("function fields not supported", t)
+	doUnsupportedTest[[]string]("slice fields not supported", t)
+	doUnsupportedTest[**int]("nested pointer fields not supported", t)
+	doUnsupportedTest[interface{}]("untyped interface fields not supported", t)
+
 }
