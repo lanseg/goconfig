@@ -15,7 +15,7 @@ A library to gather parameters from various places into a single config struct
 ## Usage examples
 ```go
 import (
-    acfg "github.com/lanseg/almostconfig"
+    "github.com/lanseg/goconfig"
 )
 
 type HttpSettings struct {
@@ -33,7 +33,7 @@ type Config struct {
 }
 
 func main() {
-    cfg, err := acfg.GetConfig[Config](acfg.FromArgs, acfg.FromEnv)
+    cfg, err := goconfig.GetConfig[goconfig.Config](goconfig.FromArgs, goconfig.FromEnv)
     if err != nil {
         fmt.Println(err)
         os.Exit(-1)
