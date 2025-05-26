@@ -114,7 +114,7 @@ func TestPlainSettings(t *testing.T) {
 			name: "scalars latest overrides arg over env",
 			args: fullScalarArgs,
 			envs: fullScalarEnv,
-			src:  []ConfigSource{FromEnv, FromArgs},
+			src:  []ConfigSource{FromEnv, (&FlagSource{}).Collect},
 			want: fullScalarArgResult,
 		},
 		{
@@ -137,14 +137,14 @@ func TestPlainSettings(t *testing.T) {
 			name:    "scalars wrong overridden by correct still fail arg first",
 			args:    []string{"--bool_field=not_a_bool"},
 			envs:    map[string]string{"BOOL_FIELD": "false"},
-			src:     []ConfigSource{FromArgs, FromEnv},
+			src:     []ConfigSource{(&FlagSource{}).Collect, FromEnv},
 			wantErr: true,
 		},
 		{
 			name:    "scalars wrong overridden by correct still fail env first",
 			args:    []string{"--bool_field=false"},
 			envs:    map[string]string{"BOOL_FIELD": "not a bool"},
-			src:     []ConfigSource{FromEnv, FromArgs},
+			src:     []ConfigSource{FromEnv, (&FlagSource{}).Collect},
 			wantErr: true,
 		},
 	} {
@@ -154,7 +154,7 @@ func TestPlainSettings(t *testing.T) {
 			}
 			os.Args = append([]string{os.Args[0]}, tc.args...)
 			if tc.src == nil {
-				tc.src = []ConfigSource{FromArgs, FromEnv}
+				tc.src = []ConfigSource{(&FlagSource{}).Collect, FromEnv}
 			}
 			config, err := GetConfig[Scalars](tc.src...)
 			if err != nil && !tc.wantErr {
@@ -213,7 +213,7 @@ func TestNestedSettings(t *testing.T) {
 			}
 			os.Args = append([]string{os.Args[0]}, tc.args...)
 			if tc.src == nil {
-				tc.src = []ConfigSource{FromArgs, FromEnv}
+				tc.src = []ConfigSource{(&FlagSource{}).Collect, FromEnv}
 			}
 			got, err := GetConfig[NestedScalarsOuter](tc.src...)
 			if err != nil && !tc.wantErr {
@@ -240,7 +240,7 @@ func TestRecursiveSettings(t *testing.T) {
 
 	t.Run("self recursed binary tree", func(t *testing.T) {
 		os.Args = append(os.Args[:1], "--value=HelloWorld", "--left_value=LeftValue")
-		got, err := GetConfig[RecursiveSettings](FromArgs, FromEnv)
+		got, err := GetConfig[RecursiveSettings]((&FlagSource{}).Collect, FromEnv)
 		if err != nil {
 			t.Errorf("Unexpected error: %s", err)
 			return
@@ -265,7 +265,7 @@ func TestAnonymousStructs(t *testing.T) {
 		os.Args = append(os.Args[:1], "--string_field=HelloWorld")
 		got, err := GetConfig[struct {
 			StringField string `arg:"string_field" env:"STRING_FIELD"`
-		}](FromArgs, FromEnv)
+		}]((&FlagSource{}).Collect, FromEnv)
 		if err != nil {
 			t.Errorf("Unexpected error: %s", err)
 			return
@@ -292,7 +292,7 @@ func doUnsupportedTest[T any](name string, t *testing.T) {
 	os.Args = os.Args[:1]
 
 	t.Run(name, func(t *testing.T) {
-		cfg, err := GetConfig[SomeStruct[T]](FromArgs, FromEnv)
+		cfg, err := GetConfig[SomeStruct[T]]((&FlagSource{}).Collect, FromEnv)
 		if err != nil {
 			t.Errorf("Unexpected error: %s", err)
 			return
@@ -318,4 +318,39 @@ func TestUnsupportedFields(t *testing.T) {
 			t.Errorf("Expected error for non-struct root type")
 		}
 	})
+}
+
+type ForFlagSource struct {
+	Value        string `arg:"value"`
+	AnotherValue int    `arg:"anotherValue"`
+}
+
+func TestFlagSource(t *testing.T) {
+	args := make([]string, len(os.Args))
+	copy(args, os.Args)
+
+	t.Run("collect arguments and flags", func(t *testing.T) {
+		fs := &FlagSource{}
+		os.Args = append(os.Args[:1], "--value=HelloWorld", "--anotherValue=123", "arg2", "arg3")
+		got, err := GetConfig[ForFlagSource](fs.Collect, FromEnv)
+		if err != nil {
+			t.Errorf("unexpected error while parsing args and flags: %s", err)
+			return
+		}
+		if diff := cmp.Diff(&ForFlagSource{"HelloWorld", 123}, got); diff != "" {
+			t.Errorf("Config mismatch (-want +got):\n%s", diff)
+		}
+		wantArgs := []string{"arg2", "arg3"}
+		if !reflect.DeepEqual(fs.Args(), wantArgs) {
+			t.Errorf("expected args to be %v, but got %v", wantArgs, fs.Args())
+		}
+	})
+
+	t.Run("args on unused FlagSource returns empty", func(t *testing.T) {
+		args := (&FlagSource{}).Args()
+		if len(args) != 0 {
+			t.Errorf("unused FlagSource should return empty args, but got %v", args)
+		}
+	})
+	os.Args = args
 }

@@ -61,8 +61,19 @@ func FromEnv(nodes []*node) error {
 	return errors.Join(result...)
 }
 
-func FromArgs(nodes []*node) error {
-	fargs := flag.NewFlagSet("Command line arguments", flag.ContinueOnError)
+type FlagSource struct {
+	flags *flag.FlagSet
+}
+
+func (ff *FlagSource) Args() []string {
+	if ff.flags == nil {
+		return []string{}
+	}
+	return ff.flags.Args()
+}
+
+func (ff *FlagSource) Collect(nodes []*node) error {
+	ff.flags = flag.NewFlagSet("Command line arguments", flag.ContinueOnError)
 	leaves := map[string]*node{}
 	for _, node := range nodes {
 		if node.field.Type.Kind() == reflect.Struct {
@@ -70,13 +81,13 @@ func FromArgs(nodes []*node) error {
 		}
 		name := strings.Join(node.tags["arg"], "_")
 		leaves[name] = node
-		fargs.String(name, "", "help")
+		ff.flags.String(name, "", "help")
 	}
-	if err := fargs.Parse(os.Args[1:]); err != nil {
+	if err := ff.flags.Parse(os.Args[1:]); err != nil {
 		return err
 	}
 	result := []error{}
-	fargs.Visit(func(f *flag.Flag) {
+	ff.flags.Visit(func(f *flag.Flag) {
 		n, ok := leaves[f.Name]
 		if !ok {
 			return
