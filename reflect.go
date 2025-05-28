@@ -1,6 +1,10 @@
 package goconfig
 
-import "reflect"
+import (
+	"fmt"
+	"reflect"
+	"strconv"
+)
 
 type node struct {
 	parent *node
@@ -32,11 +36,13 @@ func collectTags(field reflect.StructField, base map[string][]string) map[string
 	return result
 }
 
-func flatten(root reflect.Type) []*node {
+func flatten(root reflect.Value) []*node {
 	result := []*node{}
 	current := &node{
-		actualType: indirect(root),
-		field:      reflect.StructField{Name: "root", Type: root},
+		actualType:  indirect(root.Type()),
+		value:       root,
+		actualValue: reflect.Indirect(root),
+		field:       reflect.StructField{Name: "root", Type: root.Type()},
 	}
 	toVisit := []*node{current}
 	seenTypes := map[string]bool{}
@@ -54,6 +60,10 @@ func flatten(root reflect.Type) []*node {
 				parent:     current,
 				actualType: indirect(f.Type),
 				tags:       collectTags(f, current.tags),
+			}
+			if current.actualValue.IsValid() && !current.actualValue.IsZero() {
+				n.value = current.actualValue.FieldByName(f.Name)
+				n.actualValue = reflect.Indirect(n.value)
 			}
 			toVisit = append(toVisit, n)
 		}
@@ -85,4 +95,32 @@ func resolveParents(n *node) {
 			Set(n.value)
 		n = n.parent
 	}
+}
+
+func set(value *reflect.Value, str string) error {
+	var result error
+	kind := value.Kind()
+	switch kind {
+	case reflect.Bool:
+		asBool, err := strconv.ParseBool(str)
+		result = err
+		value.SetBool(asBool)
+	case reflect.String:
+		value.SetString(str)
+	case reflect.Int, reflect.Int64:
+		asInt, err := strconv.Atoi(str)
+		result = err
+		value.SetInt(int64(asInt))
+	case reflect.Uint, reflect.Uint64:
+		asUint, err := strconv.ParseUint(str, 10, 64)
+		result = err
+		value.SetUint(asUint)
+	case reflect.Float32, reflect.Float64:
+		asFloat, err := strconv.ParseFloat(str, 64)
+		result = err
+		value.SetFloat(asFloat)
+	default:
+		result = fmt.Errorf("unsupported field type %s", kind)
+	}
+	return result
 }

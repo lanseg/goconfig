@@ -354,3 +354,7 @@ func TestFlagSource(t *testing.T) {
 	})
 	os.Args = args
 }
+
+func TestSettingsWithDefaults(t *testing.T) {
+
+}

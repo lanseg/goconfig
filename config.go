@@ -16,13 +16,15 @@ var (
 type ConfigSource = func(nodes []*node) error
 
 func GetConfig[T any](sources ...ConfigSource) (*T, error) {
-	rootType := reflect.TypeFor[T]()
-	if rootType.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("only struct types are supported, but got kind %s", rootType.Kind())
+	root := new(T)
+	rootValue := reflect.ValueOf(root)
+	if reflect.Indirect(rootValue).Kind() != reflect.Struct {
+		return nil, fmt.Errorf("only struct types are supported, but got kind %s", rootValue.Kind())
 	}
-	result := new(T)
-	nodes := flatten(reflect.TypeFor[T]())
-	nodes[0].value = reflect.ValueOf(result)
+	if len(sources) == 0 {
+		return root, nil
+	}
+	nodes := flatten(rootValue)
 
 	scalars := getScalars(nodes)
 	for _, node := range scalars {
@@ -43,5 +45,5 @@ func GetConfig[T any](sources ...ConfigSource) (*T, error) {
 		node.parent.actualValue.FieldByName(node.field.Name).Set(node.actualValue)
 	}
 
-	return result, nil
+	return root, nil
 }

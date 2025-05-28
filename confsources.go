@@ -3,40 +3,10 @@ package goconfig
 import (
 	"errors"
 	"flag"
-	"fmt"
 	"os"
 	"reflect"
-	"strconv"
 	"strings"
 )
-
-func set(value *reflect.Value, str string) error {
-	var result error
-	kind := value.Kind()
-	switch kind {
-	case reflect.Bool:
-		asBool, err := strconv.ParseBool(str)
-		result = err
-		value.SetBool(asBool)
-	case reflect.String:
-		value.SetString(str)
-	case reflect.Int, reflect.Int64:
-		asInt, err := strconv.Atoi(str)
-		result = err
-		value.SetInt(int64(asInt))
-	case reflect.Uint, reflect.Uint64:
-		asUint, err := strconv.ParseUint(str, 10, 64)
-		result = err
-		value.SetUint(asUint)
-	case reflect.Float32, reflect.Float64:
-		asFloat, err := strconv.ParseFloat(str, 64)
-		result = err
-		value.SetFloat(asFloat)
-	default:
-		result = fmt.Errorf("unsupported field type %s", kind)
-	}
-	return result
-}
 
 func FromEnv(nodes []*node) error {
 	result := []error{}
