@@ -9,7 +9,7 @@ A library to gather parameters from various places into a single config struct
   * Automatically build configuration argument names
 * Cannot (yet):
   * Define maps or arrays with command line args or environment variables
-  * Use recursive structs (when a struct has a child of the same type)
+  * Properly use recursive structs (when a struct has a child of the same type)
   * Operate multilevel pointers (pointer to pointer to ... to pointer to something)
 * Cannot:
   * Operate ```chan``` fields
@@ -30,7 +30,14 @@ A library to gather parameters from various places into a single config struct
 
 ## Examples
 ```go
+// $ go mod init main && go mod tidy && go build .
+// $ ./main  --storage_root Hello --http_timeout 10 --http_retries 3
+// Config { Http: HttpSettings { Timeout: 10, Retries: 3 }, Storage: StorageSettings { Root: "Hello" } }
+package main
+
 import (
+    "fmt"
+    "os"
     "github.com/lanseg/goconfig"
 )
 
@@ -39,22 +46,33 @@ type HttpSettings struct {
     Retries int `arg:"retries" env:"RETRIES"`
 }
 
+func (h *HttpSettings) String() string {
+    return fmt.Sprintf("HttpSettings { Timeout: %d, Retries: %d }", h.Timeout, h.Retries)
+}
+
 type StorageSettings struct {
     Root string `arg:"root" env:"ROOT"`
 }
 
+func (sr *StorageSettings) String() string {
+    return fmt.Sprintf("StorageSettings { Root: %q }", sr.Root)
+}
+
 type Config struct {
-    HttpSettings    `arg:"http" env:"HTTP"`
-    StorageSettings `arg:"storage" env:"STORAGE"`
+    Http *HttpSettings    `arg:"http" env:"HTTP"`
+    Storage *StorageSettings `arg:"storage" env:"STORAGE"`
+}
+
+func (cf *Config) String() string {
+    return fmt.Sprintf("Config { Http: %s, Storage: %s }", cf.Http, cf.Storage)
 }
 
 func main() {
-    cfg, err := goconfig.GetConfig[goconfig.Config](goconfig.FromArgs, goconfig.FromEnv)
+    cfg, err := goconfig.GetConfig[Config](goconfig.FromFlags, goconfig.FromEnv)
     if err != nil {
         fmt.Println(err)
         os.Exit(-1)
     }
-r
     fmt.Println(cfg)
 }
 ```
