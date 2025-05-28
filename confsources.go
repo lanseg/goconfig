@@ -31,6 +31,10 @@ func FromEnv(nodes []*node) error {
 	return errors.Join(result...)
 }
 
+func FromFlags(nodes []*node) error {
+	return (&FlagSource{}).Collect(nodes)
+}
+
 type FlagSource struct {
 	flags *flag.FlagSet
 }

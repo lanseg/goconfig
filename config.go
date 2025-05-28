@@ -16,7 +16,10 @@ var (
 type ConfigSource = func(nodes []*node) error
 
 func GetConfig[T any](sources ...ConfigSource) (*T, error) {
-	root := new(T)
+	return GetConfigTo(new(T), sources...)
+}
+
+func GetConfigTo[T any](root *T, sources ...ConfigSource) (*T, error) {
 	rootValue := reflect.ValueOf(root)
 	if reflect.Indirect(rootValue).Kind() != reflect.Struct {
 		return nil, fmt.Errorf("only struct types are supported, but got kind %s", rootValue.Kind())

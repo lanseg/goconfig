@@ -20,9 +20,8 @@ type Scalars struct {
 	NoTagField string
 }
 
-func TestPlainSettings(t *testing.T) {
-
-	fullScalarArgs := []string{
+var (
+	fullScalarArgs = []string{
 		"--bool_field=true",
 		"--string_field=String_field_set",
 		"--int_field=-123",
@@ -34,7 +33,7 @@ func TestPlainSettings(t *testing.T) {
 		"--NoTagField=whatever",
 	}
 
-	fullScalarArgResult := &Scalars{
+	fullScalarArgResult = &Scalars{
 		Bool:       true,
 		String:     "String_field_set",
 		Int:        -123,
@@ -46,7 +45,7 @@ func TestPlainSettings(t *testing.T) {
 		NoTagField: "whatever",
 	}
 
-	fullScalarEnv := map[string]string{
+	fullScalarEnv = map[string]string{
 		"BOOL_FIELD":    "true",
 		"STRING_FIELD":  "String_field_set",
 		"INT_FIELD":     "-123",
@@ -58,7 +57,7 @@ func TestPlainSettings(t *testing.T) {
 		"NoTagField":    "whatever",
 	}
 
-	fullScalarEnvResult := &Scalars{
+	fullScalarEnvResult = &Scalars{
 		Bool:       true,
 		String:     "String_field_set",
 		Int:        -123,
@@ -69,6 +68,9 @@ func TestPlainSettings(t *testing.T) {
 		Float64:    3.141592653589793,
 		NoTagField: "whatever",
 	}
+)
+
+func TestPlainSettings(t *testing.T) {
 
 	args := make([]string, len(os.Args))
 	copy(args, os.Args)
@@ -114,7 +116,7 @@ func TestPlainSettings(t *testing.T) {
 			name: "scalars latest overrides arg over env",
 			args: fullScalarArgs,
 			envs: fullScalarEnv,
-			src:  []ConfigSource{FromEnv, (&FlagSource{}).Collect},
+			src:  []ConfigSource{FromEnv, FromFlags},
 			want: fullScalarArgResult,
 		},
 		{
@@ -144,7 +146,7 @@ func TestPlainSettings(t *testing.T) {
 			name:    "scalars wrong overridden by correct still fail env first",
 			args:    []string{"--bool_field=false"},
 			envs:    map[string]string{"BOOL_FIELD": "not a bool"},
-			src:     []ConfigSource{FromEnv, (&FlagSource{}).Collect},
+			src:     []ConfigSource{FromEnv, FromFlags},
 			wantErr: true,
 		},
 	} {
@@ -356,5 +358,35 @@ func TestFlagSource(t *testing.T) {
 }
 
 func TestSettingsWithDefaults(t *testing.T) {
+	args := make([]string, len(os.Args))
+	copy(args, os.Args)
 
+	defaults := &Scalars{
+		Bool:       true,
+		String:     "String default",
+		Int:        -1,
+		Int64:      -2,
+		Uint:       3,
+		Uint64:     4,
+		Float32:    5.6,
+		Float64:    6.7,
+		NoTagField: "notag default",
+	}
+
+	t.Run("test default values", func(t *testing.T) {
+		os.Args = append(os.Args[:1], fullScalarArgs...)
+		config, err := GetConfigTo(defaults, FromFlags, FromEnv)
+		if err != nil {
+			t.Errorf("unexpected error while parsing args and flags: %s", err)
+			return
+		}
+		if err != nil {
+			t.Errorf("Unexpected error: %s", err)
+		} else if !reflect.DeepEqual(fullScalarArgResult, config) {
+			t.Errorf("Expected config for flags %q should be \n%v, but got\n%v",
+				fullScalarArgs, fullScalarArgResult, config)
+		}
+
+	})
+	os.Args = args
 }
