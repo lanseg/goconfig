@@ -12,13 +12,13 @@ var (
 		reflect.Int32: true, reflect.Int64: true, reflect.Uint: true, reflect.Uint8: true,
 		reflect.Uint16: true, reflect.Uint32: true, reflect.Uint64: true, reflect.Float32: true,
 		reflect.Float64: true, reflect.String: true,
-		//Complex64
-		//Complex128
+		// TODO: Support for Complex64, Complex128
 	}
 	withElem = map[reflect.Kind]bool{
 		reflect.Array: true, reflect.Chan: true, reflect.Map: true, reflect.Pointer: true,
 		reflect.Slice: true,
 	}
+	supportedTags = []string{"env", "arg"}
 )
 
 type node struct {
@@ -54,10 +54,10 @@ func collectTags(field reflect.StructField, base map[string][]string) map[string
 func flatten(root reflect.Value) []*node {
 	result := []*node{}
 	current := &node{
+		field:       reflect.StructField{Name: "root", Type: root.Type()},
 		actualType:  indirect(root.Type()),
 		value:       root,
 		actualValue: reflect.Indirect(root),
-		field:       reflect.StructField{Name: "root", Type: root.Type()},
 	}
 	toVisit := []*node{current}
 	seenTypes := map[string]bool{}
@@ -72,8 +72,8 @@ func flatten(root reflect.Value) []*node {
 		for _, f := range reflect.VisibleFields(current.actualType) {
 			n := &node{
 				field:      f,
-				parent:     current,
 				actualType: indirect(f.Type),
+				parent:     current,
 				tags:       collectTags(f, current.tags),
 			}
 			if current.actualValue.IsValid() && !current.actualValue.IsZero() {
@@ -101,21 +101,14 @@ func resolveParents(nodes []*node) {
 		if !node.hasValue {
 			continue
 		}
-
-		n := node
-		for n.parent != nil {
-			if !n.parent.value.IsValid() {
-				n.parent.value = reflect.New(n.parent.actualType)
+		for n := node; n.parent != nil; n = n.parent {
+			p := n.parent
+			if !p.value.IsValid() {
+				p.value = reflect.New(p.actualType)
+				p.actualValue = reflect.Indirect(p.value)
 			}
-			if !n.parent.actualValue.IsValid() {
-				n.parent.actualValue = reflect.Indirect(n.parent.value)
-			}
-			n.parent.actualValue.
-				FieldByName(n.field.Name).
-				Set(n.value)
-			n = n.parent
+			p.actualValue.FieldByName(n.field.Name).Set(n.value)
 		}
-
 		node.parent.actualValue.FieldByName(node.field.Name).Set(node.actualValue)
 	}
 }
@@ -134,8 +127,7 @@ func hasCycles(nodes []*node) bool {
 
 func set(value *reflect.Value, str string) error {
 	var result error
-	kind := value.Kind()
-	switch kind {
+	switch value.Kind() {
 	case reflect.Bool:
 		asBool, err := strconv.ParseBool(str)
 		result = err
@@ -155,7 +147,7 @@ func set(value *reflect.Value, str string) error {
 		result = err
 		value.SetFloat(asFloat)
 	default:
-		result = fmt.Errorf("unsupported field type %s", kind)
+		result = fmt.Errorf("unsupported field type %s", value.Kind())
 	}
 	return result
 }

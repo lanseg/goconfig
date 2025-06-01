@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+const ParamSeparator = "_"
+
+type ConfigSource = func(nodes []*node) error
+
 func FromEnv(nodes []*node) error {
 	result := []error{}
 	for _, node := range nodes {
@@ -30,10 +34,6 @@ func FromEnv(nodes []*node) error {
 		}
 	}
 	return errors.Join(result...)
-}
-
-func FromFlags(nodes []*node) error {
-	return (&FlagSource{}).Collect(nodes)
 }
 
 type FlagSource struct {
@@ -73,4 +73,8 @@ func (ff *FlagSource) Collect(nodes []*node) error {
 			setFunc(node))
 	}
 	return ff.flags.Parse(os.Args[1:])
+}
+
+func FromFlags(nodes []*node) error {
+	return (&FlagSource{}).Collect(nodes)
 }

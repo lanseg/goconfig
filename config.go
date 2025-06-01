@@ -6,16 +6,6 @@ import (
 	"reflect"
 )
 
-const (
-	ParamSeparator = "_"
-)
-
-var (
-	supportedTags = []string{"env", "arg"}
-)
-
-type ConfigSource = func(nodes []*node) error
-
 func GetConfig[T any](sources ...ConfigSource) (*T, error) {
 	return GetConfigTo(new(T), sources...)
 }
