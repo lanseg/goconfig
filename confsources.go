@@ -3,6 +3,7 @@ package goconfig
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -46,35 +47,30 @@ func (ff *FlagSource) Args() []string {
 	return ff.flags.Args()
 }
 
+func setFunc(n *node) func(value string) error {
+	return func(value string) error {
+		if value == "" {
+			return nil
+		}
+		if err := set(&n.value, value); err != nil {
+			return err
+		}
+		n.hasValue = true
+		return nil
+	}
+}
+
 func (ff *FlagSource) Collect(nodes []*node) error {
 	ff.flags = flag.NewFlagSet("Command line arguments", flag.ContinueOnError)
-	leaves := map[string]*node{}
 	for _, node := range nodes {
-		if node.field.Type.Kind() == reflect.Struct {
+		nodeType := node.actualType
+		if nodeType.Kind() == reflect.Struct {
 			continue
 		}
-		name := strings.Join(node.tags["arg"], "_")
-		leaves[name] = node
-		ff.flags.String(name, "", "help")
+		ff.flags.BoolFunc(
+			strings.Join(node.tags["arg"], "_"),
+			fmt.Sprintf("parameter of type %q", node.actualType.Name()),
+			setFunc(node))
 	}
-	if err := ff.flags.Parse(os.Args[1:]); err != nil {
-		return err
-	}
-	result := []error{}
-	ff.flags.Visit(func(f *flag.Flag) {
-		n, ok := leaves[f.Name]
-		if !ok {
-			return
-		}
-		v := n.value
-		if v.Kind() == reflect.Pointer {
-			v = v.Elem()
-		}
-		if err := set(&v, f.Value.String()); err != nil {
-			result = append(result, err)
-		} else {
-			n.hasValue = true
-		}
-	})
-	return errors.Join(result...)
+	return ff.flags.Parse(os.Args[1:])
 }

@@ -6,6 +6,21 @@ import (
 	"strconv"
 )
 
+var (
+	primitiveKinds = map[reflect.Kind]bool{
+		reflect.Bool: true, reflect.Int: true, reflect.Int8: true, reflect.Int16: true,
+		reflect.Int32: true, reflect.Int64: true, reflect.Uint: true, reflect.Uint8: true,
+		reflect.Uint16: true, reflect.Uint32: true, reflect.Uint64: true, reflect.Float32: true,
+		reflect.Float64: true, reflect.String: true,
+		//Complex64
+		//Complex128
+	}
+	withElem = map[reflect.Kind]bool{
+		reflect.Array: true, reflect.Chan: true, reflect.Map: true, reflect.Pointer: true,
+		reflect.Slice: true,
+	}
+)
+
 type node struct {
 	parent *node
 
@@ -18,7 +33,7 @@ type node struct {
 }
 
 func indirect(root reflect.Type) reflect.Type {
-	for root.Kind() == reflect.Pointer || root.Kind() == reflect.Slice || root.Kind() == reflect.Array {
+	for withElem[root.Kind()] {
 		root = root.Elem()
 	}
 	return root
@@ -74,27 +89,47 @@ func flatten(root reflect.Value) []*node {
 func getScalars(nodes []*node) []*node {
 	result := []*node{}
 	for _, node := range nodes {
-		if node.actualType.Kind() == reflect.Struct {
-			continue
+		if primitiveKinds[node.actualType.Kind()] {
+			result = append(result, node)
 		}
-		result = append(result, node)
 	}
 	return result
 }
 
-func resolveParents(n *node) {
-	for n.parent != nil {
-		if !n.parent.value.IsValid() {
-			n.parent.value = reflect.New(n.parent.actualType)
+func resolveParents(nodes []*node) {
+	for _, node := range nodes {
+		if !node.hasValue {
+			continue
 		}
-		if !n.parent.actualValue.IsValid() {
-			n.parent.actualValue = reflect.Indirect(n.parent.value)
+
+		n := node
+		for n.parent != nil {
+			if !n.parent.value.IsValid() {
+				n.parent.value = reflect.New(n.parent.actualType)
+			}
+			if !n.parent.actualValue.IsValid() {
+				n.parent.actualValue = reflect.Indirect(n.parent.value)
+			}
+			n.parent.actualValue.
+				FieldByName(n.field.Name).
+				Set(n.value)
+			n = n.parent
 		}
-		n.parent.actualValue.
-			FieldByName(n.field.Name).
-			Set(n.value)
-		n = n.parent
+
+		node.parent.actualValue.FieldByName(node.field.Name).Set(node.actualValue)
 	}
+}
+
+func hasCycles(nodes []*node) bool {
+	// TODO: Implement properly
+	for _, node := range nodes {
+		for n := node.parent; n != nil; n = n.parent {
+			if node.actualType == n.actualType {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func set(value *reflect.Value, str string) error {

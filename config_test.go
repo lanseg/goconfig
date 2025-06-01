@@ -312,7 +312,7 @@ func TestUnsupportedFields(t *testing.T) {
 	doUnsupportedTest[interface{}]("untyped interface fields not supported", t)
 
 	t.Run("Only structs for root type", func(t *testing.T) {
-		if _, err := GetConfig[int](); err == nil {
+		if _, err := GetConfig[int](FromFlags, FromEnv); err == nil {
 			t.Errorf("Expected error for non-struct root type")
 		}
 	})

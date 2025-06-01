@@ -21,22 +21,19 @@ func GetConfig[T any](sources ...ConfigSource) (*T, error) {
 }
 
 func GetConfigTo[T any](root *T, sources ...ConfigSource) (*T, error) {
-	rootValue := reflect.ValueOf(root)
-	if reflect.Indirect(rootValue).Kind() != reflect.Struct {
-		return nil, fmt.Errorf("only struct types are supported, but got kind %s", rootValue.Kind())
-	}
 	if len(sources) == 0 {
 		return root, nil
 	}
+	if root == nil {
+		return nil, errors.New("cannot use nil for the default struct")
+	}
+	rootValue := reflect.Indirect(reflect.ValueOf(root))
+	if rootValue.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("only struct types are supported, but got kind %s", rootValue.Kind())
+	}
 	nodes := flatten(rootValue)
-
-	// TODO: Implement properly
-	for _, node := range nodes {
-		for n := node.parent; n != nil; n = n.parent {
-			if node.actualType == n.actualType {
-				return nil, errors.New("loop detected")
-			}
-		}
+	if hasCycles(nodes) {
+		return nil, errors.New("cycles found")
 	}
 
 	scalars := getScalars(nodes)
@@ -44,19 +41,11 @@ func GetConfigTo[T any](root *T, sources ...ConfigSource) (*T, error) {
 		node.value = reflect.New(indirect(node.field.Type)).Elem()
 		node.actualValue = reflect.Indirect(node.value)
 	}
-
 	for _, src := range sources {
 		if err := src(scalars); err != nil {
 			return nil, err
 		}
 	}
-	for _, node := range scalars {
-		if !node.hasValue {
-			continue
-		}
-		resolveParents(node)
-		node.parent.actualValue.FieldByName(node.field.Name).Set(node.actualValue)
-	}
-
+	resolveParents(scalars)
 	return root, nil
 }
