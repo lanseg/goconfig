@@ -1,6 +1,7 @@
 package goconfig
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 )
@@ -28,6 +29,15 @@ func GetConfigTo[T any](root *T, sources ...ConfigSource) (*T, error) {
 		return root, nil
 	}
 	nodes := flatten(rootValue)
+
+	// TODO: Implement properly
+	for _, node := range nodes {
+		for n := node.parent; n != nil; n = n.parent {
+			if node.actualType == n.actualType {
+				return nil, errors.New("loop detected")
+			}
+		}
+	}
 
 	scalars := getScalars(nodes)
 	for _, node := range scalars {

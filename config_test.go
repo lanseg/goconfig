@@ -1,6 +1,7 @@
 package goconfig
 
 import (
+	"fmt"
 	"os"
 	"reflect"
 	"testing"
@@ -18,6 +19,29 @@ type Scalars struct {
 	Float32    float32 `arg:"float32_field" env:"FLOAT32_FIELD"`
 	Float64    float64 `arg:"float64_field" env:"FLOAT64_FIELD"`
 	NoTagField string
+}
+
+type RecursiveSettings struct {
+	Value string             `arg:"value" env:"VALUE"`
+	Left  *RecursiveSettings `arg:"left" env:"LEFT"`
+	Right *RecursiveSettings `arg:"right" env:"RIGHT"`
+}
+
+func (rs *RecursiveSettings) String() string {
+	return fmt.Sprintf("RecursiveSettings %q %p %p", rs.Value, rs.Left, rs.Right)
+}
+
+type NestedScalarsInner struct {
+	First  *Scalars `arg:"first" env:"FIRST"`
+	Second *Scalars `arg:"second" env:"SECOND"`
+	String string   `arg:"string" env:"STRING"`
+}
+
+type NestedScalarsOuter struct {
+	First  *NestedScalarsInner `arg:"first" env:"FIRST"`
+	Second *NestedScalarsInner `arg:"second" env:"SECOND"`
+	Third  *Scalars            `arg:"third" env:"THIRD"`
+	String string              `arg:"string" env:"STRING"`
 }
 
 var (
@@ -139,7 +163,7 @@ func TestPlainSettings(t *testing.T) {
 			name:    "scalars wrong overridden by correct still fail arg first",
 			args:    []string{"--bool_field=not_a_bool"},
 			envs:    map[string]string{"BOOL_FIELD": "false"},
-			src:     []ConfigSource{(&FlagSource{}).Collect, FromEnv},
+			src:     []ConfigSource{FromFlags, FromEnv},
 			wantErr: true,
 		},
 		{
@@ -156,7 +180,7 @@ func TestPlainSettings(t *testing.T) {
 			}
 			os.Args = append([]string{os.Args[0]}, tc.args...)
 			if tc.src == nil {
-				tc.src = []ConfigSource{(&FlagSource{}).Collect, FromEnv}
+				tc.src = []ConfigSource{FromFlags, FromEnv}
 			}
 			config, err := GetConfig[Scalars](tc.src...)
 			if err != nil && !tc.wantErr {
@@ -168,19 +192,6 @@ func TestPlainSettings(t *testing.T) {
 		})
 	}
 	os.Args = args
-}
-
-type NestedScalarsInner struct {
-	First  *Scalars `arg:"first" env:"FIRST"`
-	Second *Scalars `arg:"second" env:"SECOND"`
-	String string   `arg:"string" env:"STRING"`
-}
-
-type NestedScalarsOuter struct {
-	First  *NestedScalarsInner `arg:"first" env:"FIRST"`
-	Second *NestedScalarsInner `arg:"second" env:"SECOND"`
-	Third  *Scalars            `arg:"third" env:"THIRD"`
-	String string              `arg:"string" env:"STRING"`
 }
 
 func TestNestedSettings(t *testing.T) {
@@ -215,7 +226,7 @@ func TestNestedSettings(t *testing.T) {
 			}
 			os.Args = append([]string{os.Args[0]}, tc.args...)
 			if tc.src == nil {
-				tc.src = []ConfigSource{(&FlagSource{}).Collect, FromEnv}
+				tc.src = []ConfigSource{FromFlags, FromEnv}
 			}
 			got, err := GetConfig[NestedScalarsOuter](tc.src...)
 			if err != nil && !tc.wantErr {
@@ -230,30 +241,15 @@ func TestNestedSettings(t *testing.T) {
 	os.Args = args
 }
 
-type RecursiveSettings struct {
-	Value string             `arg:"value" env:"VALUE"`
-	Left  *RecursiveSettings `arg:"left" env:"LEFT"`
-	Right *RecursiveSettings `arg:"right" env:"RIGHT"`
-}
-
 func TestRecursiveSettings(t *testing.T) {
 	args := make([]string, len(os.Args))
 	copy(args, os.Args)
 
 	t.Run("self recursed binary tree", func(t *testing.T) {
 		os.Args = append(os.Args[:1], "--value=HelloWorld", "--left_value=LeftValue")
-		got, err := GetConfig[RecursiveSettings]((&FlagSource{}).Collect, FromEnv)
-		if err != nil {
-			t.Errorf("Unexpected error: %s", err)
+		if _, err := GetConfig[RecursiveSettings](FromFlags, FromEnv); err == nil {
+			t.Errorf("no expected error found")
 			return
-		}
-
-		want := &RecursiveSettings{
-			Value: "HelloWorld",
-			Left:  &RecursiveSettings{Value: "LeftValue"},
-		}
-		if diff := cmp.Diff(want, got); diff != "" {
-			t.Errorf("Config mismatch (-want +got):\n%s", diff)
 		}
 	})
 	os.Args = args
@@ -267,7 +263,7 @@ func TestAnonymousStructs(t *testing.T) {
 		os.Args = append(os.Args[:1], "--string_field=HelloWorld")
 		got, err := GetConfig[struct {
 			StringField string `arg:"string_field" env:"STRING_FIELD"`
-		}]((&FlagSource{}).Collect, FromEnv)
+		}](FromFlags, FromEnv)
 		if err != nil {
 			t.Errorf("Unexpected error: %s", err)
 			return
@@ -294,7 +290,7 @@ func doUnsupportedTest[T any](name string, t *testing.T) {
 	os.Args = os.Args[:1]
 
 	t.Run(name, func(t *testing.T) {
-		cfg, err := GetConfig[SomeStruct[T]]((&FlagSource{}).Collect, FromEnv)
+		cfg, err := GetConfig[SomeStruct[T]](FromFlags, FromEnv)
 		if err != nil {
 			t.Errorf("Unexpected error: %s", err)
 			return
@@ -380,11 +376,23 @@ func TestSettingsWithDefaults(t *testing.T) {
 			t.Errorf("unexpected error while parsing args and flags: %s", err)
 			return
 		}
-		if err != nil {
-			t.Errorf("Unexpected error: %s", err)
-		} else if !reflect.DeepEqual(fullScalarArgResult, config) {
+		if !reflect.DeepEqual(fullScalarArgResult, config) {
 			t.Errorf("Expected config for flags %q should be \n%v, but got\n%v",
 				fullScalarArgs, fullScalarArgResult, config)
+		}
+
+	})
+
+	t.Run("test recursive values error", func(t *testing.T) {
+		center := &RecursiveSettings{Left: &RecursiveSettings{}, Right: &RecursiveSettings{}}
+		center.Left.Right = center.Left
+		center.Left.Left = center.Right
+		center.Right.Left = center
+		center.Right.Right = center.Left
+
+		os.Args = append(os.Args[:1], "--left_value=123")
+		if _, err := GetConfigTo(center, FromFlags, FromEnv); err == nil {
+			t.Errorf("no expected error while parsing args and flags: %s", err)
 		}
 
 	})
