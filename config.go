@@ -6,10 +6,12 @@ import (
 	"reflect"
 )
 
+// GetConfig loads config into a new variable
 func GetConfig[T any](sources ...ConfigSource) (*T, error) {
 	return GetConfigTo(new(T), sources...)
 }
 
+// GetConfigTo loads config into an existing object overriding existing values
 func GetConfigTo[T any](root *T, sources ...ConfigSource) (*T, error) {
 	if len(sources) == 0 {
 		return root, nil
@@ -26,7 +28,7 @@ func GetConfigTo[T any](root *T, sources ...ConfigSource) (*T, error) {
 		return nil, errors.New("cycles found")
 	}
 
-	scalars := getScalars(nodes)
+	scalars := getPrimitiveFields(nodes)
 	for _, node := range scalars {
 		node.value = reflect.New(indirect(node.field.Type)).Elem()
 		node.actualValue = reflect.Indirect(node.value)
@@ -36,6 +38,6 @@ func GetConfigTo[T any](root *T, sources ...ConfigSource) (*T, error) {
 			return nil, err
 		}
 	}
-	resolveParents(scalars)
+	rebuildRelations(scalars)
 	return root, nil
 }

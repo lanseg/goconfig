@@ -32,6 +32,7 @@ type node struct {
 	actualValue reflect.Value
 }
 
+// indirect is an equivalent of reflect.Indirect, but for reflect.Struct
 func indirect(root reflect.Type) reflect.Type {
 	for withElem[root.Kind()] {
 		root = root.Elem()
@@ -39,18 +40,21 @@ func indirect(root reflect.Type) reflect.Type {
 	return root
 }
 
+// collectTags takes supported tags from the struct field and adds them to tha base map.
+// Used to build a full value list for a tag: struct tag values and tag values of all their parents.
 func collectTags(field reflect.StructField, base map[string][]string) map[string][]string {
 	result := map[string][]string{}
 	for _, tagName := range supportedTags {
-		if tagValue, ok := field.Tag.Lookup(tagName); ok {
-			result[tagName] = append(base[tagName], tagValue)
-		} else {
-			result[tagName] = append(base[tagName], field.Name)
+		tagValue, ok := field.Tag.Lookup(tagName)
+		if !ok {
+			tagValue = field.Name
 		}
+		result[tagName] = append(base[tagName], tagValue)
 	}
 	return result
 }
 
+// flatten constructs an array from a graph based on the reflect.Value preserving parent information.
 func flatten(root reflect.Value) []*node {
 	result := []*node{}
 	current := &node{
@@ -86,7 +90,9 @@ func flatten(root reflect.Value) []*node {
 	return result
 }
 
-func getScalars(nodes []*node) []*node {
+// getPrimitiveFields filters out nodes that wrap primitive value fields. Returns an empty array if
+// no such fields.
+func getPrimitiveFields(nodes []*node) []*node {
 	result := []*node{}
 	for _, node := range nodes {
 		if primitiveKinds[node.actualType.Kind()] {
@@ -96,7 +102,11 @@ func getScalars(nodes []*node) []*node {
 	return result
 }
 
-func resolveParents(nodes []*node) {
+// rebuildRelations recreates whole hierarchy for nodes that have values.
+// If a node has value, then we set nodes value to the relevant parent field, repeat this to parent
+// until we reach the topmost struct.
+// If parent struct is nil, then we also create this struct.
+func rebuildRelations(nodes []*node) {
 	for _, node := range nodes {
 		if !node.hasValue {
 			continue
@@ -113,6 +123,8 @@ func resolveParents(nodes []*node) {
 	}
 }
 
+// hasCycles checks if there is a type which has a field of the same type among all descendants that
+// can possibly lead to a cycle.
 func hasCycles(nodes []*node) bool {
 	// TODO: Implement properly
 	for _, node := range nodes {
@@ -125,6 +137,8 @@ func hasCycles(nodes []*node) bool {
 	return false
 }
 
+// set sets actual reflect.Value from its string representation. Returns an error if the value
+// type is not supported or string cannot be properly parsed.
 func set(value *reflect.Value, str string) error {
 	var result error
 	switch value.Kind() {

@@ -260,7 +260,7 @@ func TestAnonymousStructs(t *testing.T) {
 	copy(args, os.Args)
 
 	t.Run("anonymous type config", func(t *testing.T) {
-		os.Args = append(os.Args[:1], "--string_field=HelloWorld")
+		os.Args = append(os.Args[:1], "--string_field", "HelloWorld")
 		got, err := GetConfig[struct {
 			StringField string `arg:"string_field" env:"STRING_FIELD"`
 		}](FromFlags, FromEnv)

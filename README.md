@@ -29,6 +29,8 @@ A library to gather parameters from various places into a single config struct
 4. Fold edge list into a tree, create nodes which have values among their branches, other will remain nil.
 
 ## Examples
+
+### Basic example
 ```go
 // $ go mod init main && go mod tidy && go build .
 // $ ./main  --storage_root Hello --http_timeout 10 --http_retries 3
@@ -74,5 +76,34 @@ func main() {
         os.Exit(-1)
     }
     fmt.Println(cfg)
+}
+```
+
+### Anonymous type example
+```go
+// $ go mod init main && go mod tidy && go build .
+// $ ./main --name="square" --size_width=10.5 --size_height=3.5
+// This is "square", 10.500x3.500
+package main
+
+import (
+	"fmt"
+	"github.com/lanseg/goconfig"
+	"os"
+)
+
+func main() {
+	cfg, err := goconfig.GetConfig[struct {
+		Name string `arg:"name"`
+		Size *struct {
+			Width  float64 `arg:"width"`
+			Height float64 `arg:"height"`
+		} `arg:"size"`
+	}](goconfig.FromFlags, goconfig.FromEnv)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(-1)
+	}
+	fmt.Printf("This is %q, %0.3fx%0.3f\n", cfg.Name, cfg.Size.Width, cfg.Size.Height)
 }
 ```
